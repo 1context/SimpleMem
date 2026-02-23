@@ -7,8 +7,6 @@ services:
     volumes:
       # Named volume so container user (appuser) can write; bind mount ./data often has wrong host ownership
       - simplemem_data:/app/MCP/data
-    ports:
-      - "8000:8000"
     environment:
       - DATA_DIR=/app/MCP/data
       - LANCEDB_PATH=/app/MCP/data/lancedb
@@ -26,6 +24,12 @@ services:
       - "host.docker.internal:host-gateway"
     # Optional: create .env from .env.example, then: docker compose --env-file .env up -d
     restart: unless-stopped
+    networks:
+      - dokploy-network
 
 volumes:
   simplemem_data:
+
+networks:
+  dokploy-network:
+    external: true
