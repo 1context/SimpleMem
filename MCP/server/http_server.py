@@ -200,6 +200,16 @@ async def delete_session(session_id: str) -> bool:
         return False
 
 
+async def delete_sessions_for_user(user_id: str) -> None:
+    """Remove all sessions and MCP handler for a user (caller must hold awareness of _session_lock usage)"""
+    async with _session_lock:
+        to_remove = [sid for sid, session in _sessions.items() if session.user_id == user_id]
+        for sid in to_remove:
+            del _sessions[sid]
+        if user_id in _mcp_handlers:
+            del _mcp_handlers[user_id]
+
+
 # === Authentication Helper ===
 
 async def verify_bearer_token(authorization: Optional[str]) -> tuple[User, str]:
@@ -384,6 +394,25 @@ async def refresh_token(token: str = Query(..., description="Token to refresh"))
         "success": True,
         "token": new_token,
     }
+
+
+@app.delete("/api/users/{user_id}", status_code=204)
+async def delete_user(
+    user_id: str,
+    authorization: Optional[str] = Header(None),
+):
+    """Delete the authenticated user's account. Requires Bearer token; only the token owner can delete their own user."""
+    user, _ = await verify_bearer_token(authorization)
+    if user.user_id != user_id:
+        raise HTTPException(status_code=403, detail="Cannot delete another user")
+
+    await delete_sessions_for_user(user_id)
+    await vector_store.delete_table(user.table_name)
+    deleted = user_store.delete_user(user_id)
+    if not deleted:
+        raise HTTPException(status_code=404, detail="User not found")
+
+    return Response(status_code=204)
 
 
 # === Health & Info ===
